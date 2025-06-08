@@ -3,21 +3,15 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
-from sklearn.ensemble import RandomForestClassifier
 
 # Memuat model yang telah dilatih
 @st.cache_resource
-def load_models():
+def load_model():
     try:
         # Productivity prediction model
         with open('model_regressor_productivity.pkl', 'rb') as file:
             productivity_model = pickle.load(file)
-        
-        # AI Group classification model
-        with open('model_classifier_productivity.pkl', 'rb') as file:
-            ai_group_model = pickle.load(file)
-        
-        return productivity_model, ai_group_model
+        return productivity_model
     except FileNotFoundError as e:
         st.error(f"File model tidak ditemukan: {e}")
         st.stop()
@@ -49,7 +43,7 @@ def determine_optimal_usage(ai_usage, productivity, hours_coding):
             return "Optimal AI Usage"
 
 try:
-    productivity_model, ai_group_model = load_models()
+    productivity_model = load_model()
 except:
     st.error("Gagal memuat model. Pastikan file model tersedia.")
     st.stop()
@@ -75,7 +69,7 @@ ai_usage = st.slider('Penggunaan AI hari ini (jam)', min_value=0.0, max_value=10
 # Tombol prediksi
 if st.button('Prediksi Produktivitas Saya'):
     try:
-        # Create input dataframes for each model
+        # Create input dataframe
         productivity_input = pd.DataFrame({
             'ai_usage_hours': [ai_usage],
             'coffee_intake_mg': [coffee_intake],
@@ -85,70 +79,38 @@ if st.button('Prediksi Produktivitas Saya'):
             'cognitive_load': [cognitive_load]
         })
         
-        classifier_input = pd.DataFrame({
-            'ai_usage_hours': [ai_usage],
-            'hours_coding': [hours_coding],
-            'sleep_hours': [sleep_hours],
-            'distractions': [distractions],
-            'coffee_intake_mg': [coffee_intake],
-            'cognitive_load': [cognitive_load]
-        })
-        
         # Make productivity prediction
         productivity = productivity_model.predict(productivity_input)[0]
         predicted_commits = productivity * hours_coding
         
-        # Predict AI group
-        ai_group_code = ai_group_model.predict(classifier_input)[0]
-        
         # Determine optimal AI usage
         usage_status = determine_optimal_usage(ai_usage, productivity, hours_coding)
         
-        # Mapping kelompok AI
-        group_mapping = {
-            0: "Non-Pengguna AI",
-            1: "Pengguna AI Ringan",
-            2: "Pengguna AI Sedang",
-            3: "Pengguna AI Berat"
-        }
-        
         recommendations = {
-            "Non-Pengguna AI": "Pertimbangkan untuk mencoba tools AI selama 1-2 jam untuk meningkatkan produktivitas",
-            "Pengguna AI Ringan": "Anda menggunakan AI dengan efektif. Coba tingkatkan penggunaan sedikit untuk tugas-tugas kompleks",
-            "Pengguna AI Sedang": "Rentang optimal. Pertahankan keseimbangan antara AI dan coding manual",
-            "Pengguna AI Berat": "Pantau produktivitas Anda - terlalu banyak AI mungkin mengurangi peluang belajar mendalam",
             "Underusing AI": "Anda bisa meningkatkan produktivitas dengan menggunakan lebih banyak AI (tambahkan 1-2 jam)",
             "Overusing AI": "Penggunaan AI yang berlebihan mungkin mengurangi pembelajaran mendalam (kurangi 1-2 jam)",
             "Optimal AI Usage": "Penggunaan AI Anda sudah optimal untuk produktivitas saat ini",
             "No Coding": "Tidak ada aktivitas coding hari ini"
         }
         
-        # Get group name
-        try:
-            ai_group = group_mapping[ai_group_code]
-        except (KeyError, TypeError):
-            ai_group = str(ai_group_code)
-        
-        recommendation = recommendations.get(usage_status, "") + "\n" + recommendations.get(ai_group, "")
+        recommendation = recommendations.get(usage_status, "")
         
         # Tampilkan hasil
         st.success(f"Prediksi produktivitas: {productivity:.2f} commit/jam")
         st.success(f"Perkiraan commit hari ini: {predicted_commits:.1f}")
         
-        # Klasifikasi pengguna AI
+        # AI Usage analysis
         st.subheader("Analisis Penggunaan AI")
-        col_a, col_b, col_c = st.columns(3)
+        col_a, col_b = st.columns(2)
         with col_a:
-            st.info(f"**Kelompok**: {ai_group}")
-        with col_b:
             st.info(f"**Level AI**: {ai_usage} jam/hari")
-        with col_c:
+        with col_b:
             st.info(f"**Status**: {usage_status}")
         
         st.info(f"**Rekomendasi**: {recommendation}")
         
         # Visualisasi
-        tab1, tab2, tab3 = st.tabs(["Pengaruh Faktor", "Dampak AI", "Optimasi AI"])
+        tab1, tab2 = st.tabs(["Pengaruh Faktor", "Dampak AI"])
         
         with tab1:
             # Feature importance untuk model produktivitas
@@ -202,48 +164,6 @@ if st.button('Prediksi Produktivitas Saya'):
                 st.pyplot(fig2)
             except Exception as e:
                 st.error(f"Error saat membuat visualisasi dampak AI: {e}")
-        
-        with tab3:
-            st.subheader("Rekomendasi Optimasi AI")
-            
-            # Calculate AI to coding ratio
-            if hours_coding > 0:
-                ai_ratio = (ai_usage / hours_coding) * 100
-            else:
-                ai_ratio = 0
-            
-            st.metric("Rasio AI/Coding", f"{ai_ratio:.1f}%")
-            
-            if usage_status == "Underusing AI":
-                st.warning("""
-                **Anda mungkin kurang menggunakan AI:**
-                - Pertimbangkan untuk menambahkan 1-2 jam penggunaan AI
-                - Fokuskan AI pada tugas-tugas repetitif
-                - Gunakan AI untuk code generation sederhana
-                """)
-            elif usage_status == "Overusing AI":
-                st.warning("""
-                **Anda mungkin terlalu bergantung pada AI:**
-                - Kurangi penggunaan AI sebanyak 1-2 jam
-                - Coba selesaikan masalah coding sederhana tanpa AI
-                - Gunakan AI hanya untuk bagian yang kompleks
-                """)
-            elif usage_status == "Optimal AI Usage":
-                st.success("""
-                **Penggunaan AI Anda optimal:**
-                - Pertahankan keseimbangan ini
-                - Terus pantau produktivitas Anda
-                - Sesuaikan penggunaan AI jika pola kerja berubah
-                """)
-            
-            # Show optimal range
-            st.info(f"""
-            **Rekomendasi Rasio AI/Coding:**
-            - Optimal: 20%-50% dari waktu coding
-            - Artinya untuk {hours_coding} jam coding:
-              - Minimal AI: {hours_coding*0.2:.1f} jam
-              - Maksimal AI: {hours_coding*0.5:.1f} jam
-            """)
             
     except Exception as e:
         st.error(f"Terjadi error saat melakukan prediksi: {e}")
@@ -261,18 +181,12 @@ with st.expander("ℹ️ Tentang Aplikasi Ini"):
     - **Beban Kognitif**: Tingkat kesulitan mental (1=sangat mudah, 10=sangat berat)
     - **Tingkat Gangguan**: Frekuensi gangguan saat bekerja (1=jarang, 10=sering)
     
-    **Kelompok Pengguna AI:**
-    - **Non-Pengguna AI**: 0 jam/hari
-    - **Pengguna AI Ringan**: <2 jam/hari  
-    - **Pengguna AI Sedang**: 2-5 jam/hari
-    - **Pengguna AI Berat**: 5+ jam/hari
-    
     **Status Penggunaan AI:**
     - **Optimal**: Penggunaan AI seimbang dengan produktivitas
     - **Underusing**: Potensi peningkatan produktivitas dengan lebih banyak AI
     - **Overusing**: Terlalu bergantung pada AI, mungkin mengurangi pembelajaran
     
-    **Catatan:** Jam coding memengaruhi klasifikasi kelompok AI dan analisis optimalitas penggunaan AI.
+    **Catatan:** Jam coding memengaruhi analisis optimalitas penggunaan AI.
     """)
 
 # Catatan kaki
